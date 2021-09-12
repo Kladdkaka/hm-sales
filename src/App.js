@@ -124,8 +124,10 @@ function Country() {
 }
 
 const ItemArticle = styled.article`
-    
+    padding: 20px;
+    ${(props) => props.isStoreSale ? css`background: lightgreen; ` : css` background: lightpink; `}
 `
+
 const ImageContainer = styled.div`
     position: relative;
 `
@@ -165,6 +167,20 @@ const ItemPriceSale = styled.span`
     width: 100%;
 `
 
+const ItemPriceRegularNotCrossed = styled.span`
+    color: #222;
+    display: inline;
+    font-weight: normal;
+    font-size: 13px;
+    letter-spacing: 0px;
+    line-height: 20px;
+    text-overflow: ellipsis;
+    text-transform: none;
+    white-space: nowrap;
+    overflow: hidden;
+    width: 100%;
+`
+
 const ItemPriceRegular = styled.span`
     color: #222;
     font-size: 11px;
@@ -184,7 +200,35 @@ const ItemPriceRegular = styled.span`
 
 
 function Item(props) {
-    return <ItemArticle>
+    let prices
+    let isStoreSale = false
+
+    if (props.storeData != null) {
+        if (props.storeData.redPrice != null) {
+            isStoreSale = true
+            prices = (
+                <ItemPrice>
+                    <ItemPriceSale>{props.storeData.redPrice.price} kr. (!)</ItemPriceSale>
+                    <ItemPriceRegular>{props.storeData.whitePrice.price} kr. (!)</ItemPriceRegular>
+                </ItemPrice>
+            )
+        } else {
+            prices = (
+                <ItemPrice>
+                    <ItemPriceRegularNotCrossed>{props.storeData.whitePrice.price} kr. (!)</ItemPriceRegularNotCrossed>
+                </ItemPrice>
+            )
+        }
+    } else {
+        prices = (
+            <ItemPrice>
+                <ItemPriceSale>{props.item.price.formattedValue} (?)</ItemPriceSale>
+                <ItemPriceRegular>{props.item.whitePrice.formattedValue} (?)</ItemPriceRegular>
+            </ItemPrice>
+        )
+    }
+
+    return <ItemArticle isStoreSale={isStoreSale}>
         <ImageContainer>
             <a href={'https://www2.hm.com' + props.item.linkPdp}>
                 <ProductImage src={props.item.images[0].url}/>
@@ -194,10 +238,7 @@ function Item(props) {
             <ItemHeading>
                 <a href={'https://www2.hm.com' + props.item.linkPdp}>{props.item.name}</a>
             </ItemHeading>
-            <ItemPrice>
-                <ItemPriceSale>{props.item.price.formattedValue}</ItemPriceSale>
-                <ItemPriceRegular>{props.item.whitePrice.formattedValue}</ItemPriceRegular>
-            </ItemPrice>
+            {prices}
         </ItemDetails>
     </ItemArticle>;
 }
@@ -229,6 +270,8 @@ function Store() {
     const [error, setError] = useState(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const [items, setItems] = useState([]);
+    const [available, setAvailable] = useState([]);
+    const [storeData, setStoreData] = useState({});
     const [page, setPage] = useState(0)
 
     useEffect(() => {
@@ -243,16 +286,30 @@ function Store() {
             },
         })
             .then(res => res.json())
-            .then(
-                (result) => {
-                    setIsLoaded(true);
-                    setItems(result.results);
-                },
-                (error) => {
-                    setIsLoaded(true);
-                    setError(error);
-                }
-            )
+            .then(result => {
+                let items = result.results;
+                setItems(items)
+
+                const articleCodes = items.map(item => item.defaultArticle.code)//.flatMap(item => item.articleCodes)
+
+                return fetch(`http://localhost:4000/sv_SE/getAvailabilityAndPrices?retailStoreId=${storeCode}&variants=${articleCodes.join(',')}`, {
+                    headers: {
+                        'Target-URL': `https://app2.hm.com/`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                })
+            })
+            .then(res => res.json())
+            .then(result => {
+                console.log(result);
+                const availableIds = [...new Set(result.availability.map(x => x.substring(0, x.length - 3)))]
+                const storeData = result.articles.reduce((prev, cur) => ({...prev, [cur.code]: cur}), {})
+                setAvailable(availableIds)
+                setStoreData(storeData)
+                setIsLoaded(true);
+
+            })
     }, [page])
 
     if (error) {
@@ -268,9 +325,12 @@ function Store() {
                     !isLoaded
                         ? <div>Loading...</div>
                         : <Wrapper>
-                            {items.filter(item => !['DAM', 'BARN', 'HEM', 'HOME'].includes(item.categoryName)).map(item => (
-                                <Item key={item.storeCode} item={item}/>
-                            ))}
+                            {items.filter(item => !['DAM', 'BARN', 'HEM', 'HOME'].includes(item.categoryName))
+                                .filter(item => available.includes(item.defaultArticle.code))
+                                .map(item => (
+                                    <Item key={item.storeCode} item={item} storeData={storeData[item.defaultArticle.code]}
+                                          isAvailable={available.includes(item.defaultArticle.code)}/>
+                                ))}
                         </Wrapper>
                 }
 
