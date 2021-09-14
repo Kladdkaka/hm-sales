@@ -276,7 +276,7 @@ function Store() {
 
     useEffect(() => {
         let query = ':stock:category:men_all:sale:true'; //`sale:true`;
-        let pageSize = `40`;
+        let pageSize = `100`;
         setIsLoaded(false)
         fetch(`http://localhost:4000/hmwebservices/service/products/search/hm-sweden/Online/sv?q=${query}&retailStoreId=${storeCode}&pageSize=${pageSize}&currentPage=${page}`, {
             headers: {
@@ -304,7 +304,7 @@ function Store() {
             .then(result => {
                 console.log(result);
                 const availableIds = [...new Set(result.availability.map(x => x.substring(0, x.length - 3)))]
-                const storeData = result.articles.reduce((prev, cur) => ({...prev, [cur.code]: cur}), {})
+                const storeData = result.articles != null ? result.articles.reduce((prev, cur) => ({...prev, [cur.code]: cur}), {}) : {}
                 setAvailable(availableIds)
                 setStoreData(storeData)
                 setIsLoaded(true);
